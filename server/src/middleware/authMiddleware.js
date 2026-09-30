@@ -3,11 +3,10 @@ const User = require('../models/User');
 
 const verifyToken = async (req, res, next) => {
   try {
-    let token = req.cookies.token;
-
-    if (!token && req.headers.authorization?.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
+    const bearerToken = req.headers.authorization?.startsWith('Bearer ')
+      ? req.headers.authorization.split(' ')[1]
+      : null;
+    const token = bearerToken || req.cookies?.token;
 
     if (!token) {
       return res.status(401).json({ message: 'Not authorized, no token' });
