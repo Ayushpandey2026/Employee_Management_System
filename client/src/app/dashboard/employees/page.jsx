@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import useDebounce from '@/hooks/useDebounce';
 import Modal from '@/components/Modal';
@@ -17,111 +17,67 @@ const formatDate = (date) =>
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState([]);
-  const [pagination, setPagination] = useState({ total: 0, page: 1, limit: PAGE_SIZE, totalPages: 1 });
   const [departments, setDepartments] = useState([]);
+  const [pagination, setPagination] = useState({ total: 0, page: 1, limit: PAGE_SIZE, totalPages: 1 });
 
-  const [search, setSearch] = useState('');
-  const [department, setDepartment] = useState('');
-  const [status, setStatus] = useState('');
-  const [page, setPage] = useState(1);
-
+  const [filters, setFilters] = useState({ search: '', department: '', status: '', page: 1 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [refreshKey, setRefreshKey] = useState(0);
 
-  const [formOpen, setFormOpen] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
-  const [employeeToDelete, setEmployeeToDelete] = useState(null);
+  const [modalState, setModalState] = useState({ open: false, employee: null });
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  const debouncedSearch = useDebounce(search, 400);
+  const debouncedSearch = useDebounce(filters.search, 400);
+
+  const loadEmployees = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const params = new URLSearchParams({ page: filters.page, limit: PAGE_SIZE });
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (filters.department) params.set('department', filters.department);
+      if (filters.status) params.set('status', filters.status);
+
+      const res = await api.get(`/employees?${params}`);
+      setEmployees(res.employees);
+      setPagination(res.pagination);
+    } catch (err) {
+      setError(err.message || 'Failed to load employees');
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.page, filters.department, filters.status, debouncedSearch]);
 
   useEffect(() => {
-    let ignore = false;
-
-    const fetchEmployees = async () => {
-      setLoading(true);
-      setError('');
-
-      try {
-        const params = new URLSearchParams({ page, limit: PAGE_SIZE });
-        if (debouncedSearch) params.set('search', debouncedSearch);
-        if (department) params.set('department', department);
-        if (status) params.set('status', status);
-
-        const data = await api.get(`/employees?${params.toString()}`);
-
-        if (!ignore) {
-          setEmployees(data.employees);
-          setPagination(data.pagination);
-        }
-      } catch (err) {
-        if (!ignore) setError(err.message);
-      } finally {
-        if (!ignore) setLoading(false);
-      }
-    };
-
-    fetchEmployees();
-
-    return () => {
-      ignore = true;
-    };
-  }, [page, debouncedSearch, department, status, refreshKey]);
+    loadEmployees();
+  }, [loadEmployees]);
 
   useEffect(() => {
-    api
-      .get('/employees/departments')
-      .then(setDepartments)
-      .catch(() => {});
-  }, [refreshKey]);
+    api.get('/employees/departments').then(setDepartments).catch(() => {});
+  }, []);
 
-  const handleSearchChange = (e) => {
-    setSearch(e.target.value);
-    setPage(1);
-  };
-
-  const handleDepartmentChange = (e) => {
-    setDepartment(e.target.value);
-    setPage(1);
-  };
-
-  const handleStatusChange = (e) => {
-    setStatus(e.target.value);
-    setPage(1);
-  };
-
-  const openAddForm = () => {
-    setSelectedEmployee(null);
-    setFormOpen(true);
-  };
-
-  const openEditForm = (employee) => {
-    setSelectedEmployee(employee);
-    setFormOpen(true);
-  };
-
-  const handleSaved = () => {
-    setFormOpen(false);
-    setSelectedEmployee(null);
-    setRefreshKey((key) => key + 1);
+  const updateFilter = (key, value) => {
+    setFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
   };
 
   const handleDelete = async () => {
+    if (!deleteTarget) return;
     setDeleting(true);
 
     try {
-      await api.delete(`/employees/${employeeToDelete._id}`);
-      setEmployeeToDelete(null);
+      await api.delete(`/employees/${deleteTarget._id}`);
+      setDeleteTarget(null);
 
-      if (employees.length === 1 && page > 1) {
-        setPage(page - 1);
+      if (employees.length === 1 && filters.page > 1) {
+        setFilters((prev) => ({ ...prev, page: prev.page - 1 }));
       } else {
-        setRefreshKey((key) => key + 1);
+        loadEmployees();
       }
     } catch (err) {
       setError(err.message);
-      setEmployeeToDelete(null);
+      setDeleteTarget(null);
     } finally {
       setDeleting(false);
     }
@@ -134,7 +90,10 @@ export default function EmployeesPage() {
           <h1 className="text-2xl font-semibold">Employees</h1>
           <p className="text-sm text-gray-500">Search, filter and manage your team.</p>
         </div>
-        <button className="btn-primary" onClick={openAddForm}>
+        <button
+          className="btn-primary"
+          onClick={() => setModalState({ open: true, employee: null })}
+        >
           + Add employee
         </button>
       </div>
@@ -144,18 +103,24 @@ export default function EmployeesPage() {
           type="text"
           placeholder="Search by name, email or designation..."
           className="input-field"
-          value={search}
-          onChange={handleSearchChange}
+          value={filters.search}
+          onChange={(e) => updateFilter('search', e.target.value)}
         />
-        <select className="input-field" value={department} onChange={handleDepartmentChange}>
+        <select
+          className="input-field"
+          value={filters.department}
+          onChange={(e) => updateFilter('department', e.target.value)}
+        >
           <option value="">All departments</option>
           {departments.map((dept) => (
-            <option key={dept} value={dept}>
-              {dept}
-            </option>
+            <option key={dept} value={dept}>{dept}</option>
           ))}
         </select>
-        <select className="input-field" value={status} onChange={handleStatusChange}>
+        <select
+          className="input-field"
+          value={filters.status}
+          onChange={(e) => updateFilter('status', e.target.value)}
+        >
           <option value="">All statuses</option>
           <option value="ACTIVE">Active</option>
           <option value="INACTIVE">Inactive</option>
@@ -195,37 +160,37 @@ export default function EmployeesPage() {
                   </td>
                 </tr>
               ) : (
-                employees.map((employee) => (
-                  <tr key={employee._id} className="hover:bg-gray-50">
+                employees.map((emp) => (
+                  <tr key={emp._id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{employee.fullName}</div>
-                      <div className="text-xs text-gray-500">{employee.email}</div>
+                      <div className="font-medium text-gray-900">{emp.fullName}</div>
+                      <div className="text-xs text-gray-500">{emp.email}</div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">{employee.phone}</td>
-                    <td className="px-4 py-3">{employee.department}</td>
-                    <td className="px-4 py-3">{employee.designation}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{formatSalary(employee.salary)}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{formatDate(employee.dateOfJoining)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{emp.phone}</td>
+                    <td className="px-4 py-3">{emp.department}</td>
+                    <td className="px-4 py-3">{emp.designation}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{formatSalary(emp.salary)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{formatDate(emp.dateOfJoining)}</td>
                     <td className="px-4 py-3">
                       <span
                         className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                          employee.status === 'ACTIVE'
+                          emp.status === 'ACTIVE'
                             ? 'bg-green-100 text-green-700'
                             : 'bg-red-100 text-red-700'
                         }`}
                       >
-                        {employee.status}
+                        {emp.status}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       <button
-                        onClick={() => openEditForm(employee)}
+                        onClick={() => setModalState({ open: true, employee: emp })}
                         className="mr-3 font-medium text-indigo-600 hover:underline"
                       >
                         Edit
                       </button>
                       <button
-                        onClick={() => setEmployeeToDelete(employee)}
+                        onClick={() => setDeleteTarget(emp)}
                         className="font-medium text-red-600 hover:underline"
                       >
                         Delete
@@ -243,28 +208,30 @@ export default function EmployeesPage() {
           totalPages={pagination.totalPages}
           total={pagination.total}
           limit={pagination.limit}
-          onPageChange={setPage}
+          onPageChange={(p) => setFilters((prev) => ({ ...prev, page: p }))}
         />
       </div>
 
-      {formOpen && (
+      {modalState.open && (
         <EmployeeFormModal
-          employee={selectedEmployee}
+          employee={modalState.employee}
           departments={departments}
-          onClose={() => setFormOpen(false)}
-          onSaved={handleSaved}
+          onClose={() => setModalState({ open: false, employee: null })}
+          onSaved={() => {
+            setModalState({ open: false, employee: null });
+            loadEmployees();
+          }}
         />
       )}
 
-      {employeeToDelete && (
-        <Modal title="Delete employee" onClose={() => setEmployeeToDelete(null)}>
+      {deleteTarget && (
+        <Modal title="Delete employee" onClose={() => setDeleteTarget(null)}>
           <p className="text-sm text-gray-600">
             Are you sure you want to delete{' '}
-            <span className="font-semibold">{employeeToDelete.fullName}</span>? This can&apos;t be
-            undone.
+            <span className="font-semibold">{deleteTarget.fullName}</span>? This can&apos;t be undone.
           </p>
           <div className="mt-6 flex justify-end gap-3">
-            <button className="btn-secondary" onClick={() => setEmployeeToDelete(null)}>
+            <button className="btn-secondary" onClick={() => setDeleteTarget(null)}>
               Cancel
             </button>
             <button

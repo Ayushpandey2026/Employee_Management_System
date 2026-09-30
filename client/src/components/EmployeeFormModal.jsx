@@ -4,51 +4,38 @@ import { useState } from 'react';
 import Modal from '@/components/Modal';
 import { api } from '@/lib/api';
 
-const toDateInput = (date) => (date ? new Date(date).toISOString().slice(0, 10) : '');
+const formatDateForInput = (isoDate) => 
+  isoDate ? new Date(isoDate).toISOString().slice(0, 10) : '';
 
 export default function EmployeeFormModal({ employee, departments, onClose, onSaved }) {
-  const isEdit = Boolean(employee);
-
-  const [form, setForm] = useState({
-    fullName: employee?.fullName || '',
-    email: employee?.email || '',
-    phone: employee?.phone || '',
-    department: employee?.department || '',
-    designation: employee?.designation || '',
-    salary: employee?.salary ?? '',
-    dateOfJoining: toDateInput(employee?.dateOfJoining),
-    status: employee?.status || 'ACTIVE',
-  });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSubmitting(true);
 
-    const payload = { ...form, salary: Number(form.salary) };
+    const formData = new FormData(e.currentTarget);
+    const payload = Object.fromEntries(formData);
+    payload.salary = Number(payload.salary);
 
     try {
-      if (isEdit) {
+      if (employee?._id) {
         await api.put(`/employees/${employee._id}`, payload);
       } else {
         await api.post('/employees', payload);
       }
       onSaved();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to save employee');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Modal title={isEdit ? 'Edit Employee' : 'Add Employee'} onClose={onClose}>
+    <Modal title={employee ? 'Edit Employee' : 'Add Employee'} onClose={onClose}>
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
       )}
@@ -58,9 +45,8 @@ export default function EmployeeFormModal({ employee, departments, onClose, onSa
           <label className="mb-1 block text-sm font-medium text-gray-700">Full name</label>
           <input
             name="fullName"
+            defaultValue={employee?.fullName || ''}
             className="input-field"
-            value={form.fullName}
-            onChange={handleChange}
             required
           />
         </div>
@@ -71,9 +57,8 @@ export default function EmployeeFormModal({ employee, departments, onClose, onSa
             <input
               type="email"
               name="email"
+              defaultValue={employee?.email || ''}
               className="input-field"
-              value={form.email}
-              onChange={handleChange}
               required
             />
           </div>
@@ -81,9 +66,8 @@ export default function EmployeeFormModal({ employee, departments, onClose, onSa
             <label className="mb-1 block text-sm font-medium text-gray-700">Phone</label>
             <input
               name="phone"
+              defaultValue={employee?.phone || ''}
               className="input-field"
-              value={form.phone}
-              onChange={handleChange}
               required
             />
           </div>
@@ -95,9 +79,8 @@ export default function EmployeeFormModal({ employee, departments, onClose, onSa
             <input
               name="department"
               list="department-options"
+              defaultValue={employee?.department || ''}
               className="input-field"
-              value={form.department}
-              onChange={handleChange}
               required
             />
             <datalist id="department-options">
@@ -110,9 +93,8 @@ export default function EmployeeFormModal({ employee, departments, onClose, onSa
             <label className="mb-1 block text-sm font-medium text-gray-700">Designation</label>
             <input
               name="designation"
+              defaultValue={employee?.designation || ''}
               className="input-field"
-              value={form.designation}
-              onChange={handleChange}
               required
             />
           </div>
@@ -125,9 +107,8 @@ export default function EmployeeFormModal({ employee, departments, onClose, onSa
               type="number"
               name="salary"
               min="0"
+              defaultValue={employee?.salary ?? ''}
               className="input-field"
-              value={form.salary}
-              onChange={handleChange}
               required
             />
           </div>
@@ -136,9 +117,8 @@ export default function EmployeeFormModal({ employee, departments, onClose, onSa
             <input
               type="date"
               name="dateOfJoining"
+              defaultValue={formatDateForInput(employee?.dateOfJoining)}
               className="input-field"
-              value={form.dateOfJoining}
-              onChange={handleChange}
               required
             />
           </div>
@@ -148,9 +128,8 @@ export default function EmployeeFormModal({ employee, departments, onClose, onSa
           <label className="mb-1 block text-sm font-medium text-gray-700">Status</label>
           <select
             name="status"
+            defaultValue={employee?.status || 'ACTIVE'}
             className="input-field"
-            value={form.status}
-            onChange={handleChange}
           >
             <option value="ACTIVE">Active</option>
             <option value="INACTIVE">Inactive</option>
@@ -162,7 +141,7 @@ export default function EmployeeFormModal({ employee, departments, onClose, onSa
             Cancel
           </button>
           <button type="submit" className="btn-primary" disabled={submitting}>
-            {submitting ? 'Saving...' : isEdit ? 'Save changes' : 'Add employee'}
+            {submitting ? 'Saving...' : employee ? 'Save changes' : 'Add employee'}
           </button>
         </div>
       </form>
