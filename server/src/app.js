@@ -7,6 +7,7 @@ const employeeRoutes = require('./routes/employeeRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
+//  Express app starts from here
 const app = express();
 const allowedOrigins = (process.env.CLIENT_URL || '')
   .split(/\s*(?:,|\|\|)\s*/)

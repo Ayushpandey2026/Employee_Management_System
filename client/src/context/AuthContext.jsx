@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
+// using context to manage authentication state and provide auth functions across the app
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
