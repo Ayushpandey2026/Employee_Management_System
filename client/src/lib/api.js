@@ -1,10 +1,15 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 async function request(path, options = {}) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
   const res = await fetch(`${API_URL}${path}`, {
     credentials: 'include', // send the httpOnly auth cookie
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
   });
 
   const data = await res.json().catch(() => ({}));

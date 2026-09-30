@@ -22,11 +22,13 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const data = await api.post('/auth/login', { email, password });
+    localStorage.setItem('authToken', data.token);
     setUser(data.user);
   };
 
   const register = async (name, email, password) => {
     const data = await api.post('/auth/register', { name, email, password });
+    localStorage.setItem('authToken', data.token);
     setUser(data.user);
   };
 
@@ -34,6 +36,7 @@ export function AuthProvider({ children }) {
     try {
       await api.post('/auth/logout');
     } finally {
+      localStorage.removeItem('authToken');
       setUser(null);
       router.push('/login');
     }

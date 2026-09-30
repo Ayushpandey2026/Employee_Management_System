@@ -1,10 +1,11 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+const isProduction = process.env.NODE_ENV === 'production';
 const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
+  secure: isProduction,
+  sameSite: isProduction ? 'none' : 'lax',
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
@@ -35,8 +36,9 @@ const register = async (req, res, next) => {
 
     const user = await User.create({ name, email, password });
 
-    res.cookie('token', generateToken(user._id), cookieOptions);
-    res.status(201).json({ user: formatUser(user) });
+    const token = generateToken(user._id);
+    res.cookie('token', token, cookieOptions);
+    res.status(201).json({ user: formatUser(user), token });
   } catch (error) {
     next(error);
   }
@@ -55,8 +57,9 @@ const login = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    res.cookie('token', generateToken(user._id), cookieOptions);
-    res.json({ user: formatUser(user) });
+    const token = generateToken(user._id);
+    res.cookie('token', token, cookieOptions);
+    res.json({ user: formatUser(user), token });
   } catch (error) {
     next(error);
   }
